@@ -3,6 +3,7 @@
 import re
 from typing import List
 from src.config import load_config
+from src.enricher import enrich_items
 from src.models import NewsItem
 from src.pusher import push_news
 
@@ -99,11 +100,15 @@ def main():
     print("\n" + "=" * 40)
     print(f"国内: {len(domestic_items)} 条 → 去重排序取 TOP 10")
     domestic_top = sort_and_top(domestic_items)
+    print("补全文字概括和相关图片...")
+    domestic_top = enrich_items(domestic_top)
     for i, item in enumerate(domestic_top, 1):
         print(f"  {i}. [{item.source}] {item.title} (热度: {item.hot_score})")
 
     print(f"\n国际: {len(international_items)} 条 → 去重排序取 TOP 10")
     international_top = sort_and_top(international_items)
+    print("补全文字概括和相关图片...")
+    international_top = enrich_items(international_top)
     for i, item in enumerate(international_top, 1):
         print(f"  {i}. [{item.source}] {item.title} (score: {item.hot_score})")
 

@@ -31,6 +31,7 @@ class WeiboCollector(BaseCollector):
                     title=word,
                     source=self.source_name,
                     url=f"https://s.weibo.com/weibo?q={word}",
+                    summary=item.get("note", "").strip(),
                     category="domestic",
                     hot_score=int(score),
                 ))

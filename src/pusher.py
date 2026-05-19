@@ -1,31 +1,67 @@
 import requests
 from typing import List
+from datetime import datetime, timezone, timedelta
 from src.models import NewsItem, PushConfig
+from src.enricher import clamp_text
+
+
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 
 def format_message(domestic_items: List[NewsItem], international_items: List[NewsItem]) -> str:
-    """Format news items into a WeChat-friendly message."""
-    lines = ["📰 今日国内外热点新闻\n", "═" * 20]
+    """Format news items into a Markdown message with summaries and images."""
+    updated_at = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
+    lines = [
+        "# 今日国内外热点新闻",
+        "",
+        f"> 更新时间：{updated_at}（北京时间）",
+        "",
+        "今日推送不再只给链接；每条包含文字概括、相关图片和来源。",
+    ]
 
-    lines.append("\n🇨🇳 国内 TOP 10\n")
-    for i, item in enumerate(domestic_items[:10], 1):
-        lines.append(f"{i}. {item.title}")
-        lines.append(f"   [{item.source}]")
-        if item.url:
-            lines.append(f"   {item.url}")
-        lines.append("")
+    lines.extend(_format_section("国内 TOP 10", domestic_items[:10]))
+    lines.extend(_format_section("国际 TOP 10", international_items[:10]))
 
-    lines.append("═" * 20)
-    lines.append("\n🌍 国际 TOP 10\n")
-    for i, item in enumerate(international_items[:10], 1):
-        lines.append(f"{i}. {item.title}")
-        lines.append(f"   [{item.source}]")
-        if item.url:
-            lines.append(f"   {item.url}")
-        lines.append("")
-
-    lines.append(f"\n更新时间：2026-05-19 08:00")
     return "\n".join(lines)
+
+
+def _format_section(title: str, items: List[NewsItem]) -> List[str]:
+    lines = ["", f"## {title}", ""]
+    for i, item in enumerate(items, 1):
+        lines.extend(_format_item(i, item))
+    return lines
+
+
+def _format_item(index: int, item: NewsItem) -> List[str]:
+    summary = clamp_text(item.summary) or (
+        f"{item.title}。该条来自{item.source}，目前热度较高，"
+        "可通过来源链接查看完整报道和后续进展。"
+    )
+    lines = [
+        f"### {index}. {item.title}",
+        "",
+        f"**来源：** {item.source}",
+        "",
+        f"**概括：** {summary}",
+        "",
+    ]
+
+    if item.image_url:
+        lines.extend([
+            "**相关图片：**",
+            "",
+            f"![{item.title}]({item.image_url})",
+            "",
+        ])
+        if item.image_source_url:
+            lines.extend([f"图片来源：{item.image_source_url}", ""])
+    else:
+        lines.extend(["**相关图片：** 未获取到可可靠引用的相关图片。", ""])
+
+    if item.url:
+        lines.extend([f"**原文链接：** {item.url}", ""])
+
+    return lines
 
 
 def push_via_serverchan(config: PushConfig, title: str, content: str) -> bool:
@@ -55,7 +91,7 @@ def push_via_pushplus(config: PushConfig, title: str, content: str) -> bool:
                 "token": config.pushplus_token,
                 "title": title,
                 "content": content,
-                "template": "txt",
+                "template": "markdown",
             },
             timeout=15,
         )

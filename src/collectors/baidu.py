@@ -35,6 +35,9 @@ class BaiduCollector(BaseCollector):
                         title=word,
                         source=self.source_name,
                         url=url,
+                        summary=item.get("desc", "").strip(),
+                        image_url=item.get("img", "") or item.get("image", ""),
+                        image_source_url=url if item.get("img") or item.get("image") else "",
                         category="domestic",
                         hot_score=score,
                     ))

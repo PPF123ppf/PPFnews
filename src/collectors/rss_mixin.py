@@ -3,6 +3,7 @@ from typing import List
 from urllib.parse import quote
 from src.models import NewsItem
 from src.collectors.base import BaseCollector
+from src.enricher import clean_text, extract_image_from_html
 
 
 class RssCollectorMixin(BaseCollector):
@@ -25,16 +26,16 @@ class RssCollectorMixin(BaseCollector):
                     continue
 
                 link = entry.get("link", "")
-                summary = entry.get("summary", "") or entry.get("description", "")
-                summary = summary.replace("<p>", " ").replace("</p>", " ") \
-                    .replace("<br>", " ").replace("<br/>", " ") \
-                    .replace("<![CDATA[", "").replace("]]>", "")
+                summary_html = entry.get("summary", "") or entry.get("description", "")
+                image_url = self._extract_entry_image(entry, summary_html)
 
                 items.append(NewsItem(
                     title=title,
                     source=self.source_name,
                     url=link,
-                    summary=summary.strip(),
+                    summary=clean_text(summary_html),
+                    image_url=image_url,
+                    image_source_url=link if image_url else "",
                     category="domestic",
                     hot_score=self.normalize_score(i + 1),
                 ))
@@ -44,6 +45,24 @@ class RssCollectorMixin(BaseCollector):
         except Exception as e:
             print(f"[{self.source_name}] RSS parse error: {e}")
             return []
+
+    def _extract_entry_image(self, entry, summary_html: str) -> str:
+        """Extract image URLs exposed by common RSS media fields."""
+        for field in ("media_content", "media_thumbnail"):
+            for media in entry.get(field, []) or []:
+                url = media.get("url")
+                if url:
+                    return url
+
+        for link in entry.get("links", []) or []:
+            if str(link.get("type", "")).startswith("image/") and link.get("href"):
+                return link["href"]
+
+        for enclosure in entry.get("enclosures", []) or []:
+            if str(enclosure.get("type", "")).startswith("image/") and enclosure.get("href"):
+                return enclosure["href"]
+
+        return extract_image_from_html(summary_html, entry.get("link", ""))
 
 
 class GoogleNewsRssMixin(RssCollectorMixin):
