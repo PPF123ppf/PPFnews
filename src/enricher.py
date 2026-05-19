@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from src.models import NewsItem
+from src.google_news import decode_google_news_url, is_google_news_url
 from src.translator import translate_to_chinese
 
 
@@ -58,6 +59,8 @@ def normalize_image_url(image_url: str, base_url: str = "") -> str:
     if parsed.scheme not in ("http", "https"):
         return ""
     if parsed.path.lower().endswith(".svg"):
+        return ""
+    if parsed.netloc in {"www.gstatic.com", "gstatic.com"} and "/gnews/logo/" in parsed.path:
         return ""
     return absolute_url
 
@@ -131,6 +134,9 @@ def fetch_article_metadata(url: str, timeout: int = 8) -> Dict[str, str]:
     """Fetch article page metadata for summary and a directly related image."""
     if not url or not url.startswith(("http://", "https://")):
         return {}
+    if is_google_news_url(url):
+        print(f"[内容补全] 跳过 Google News 聚合页: {url}")
+        return {}
 
     try:
         resp = requests.get(url, headers=HEADERS, timeout=timeout)
@@ -184,6 +190,9 @@ def fetch_article_metadata(url: str, timeout: int = 8) -> Dict[str, str]:
 def enrich_items(items: List[NewsItem]) -> List[NewsItem]:
     """Fill missing summaries/images after ranking, limiting network work to pushed items."""
     for item in items:
+        if is_google_news_url(item.url):
+            item.url = decode_google_news_url(item.url)
+
         metadata: Dict[str, str] = fetch_article_metadata(item.url)
 
         metadata_summary = metadata.get("summary", "")
