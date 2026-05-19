@@ -47,7 +47,7 @@ def _get_decoding_params(article_id: str) -> dict:
         resp = requests.get(
             f"https://news.google.com/{prefix}/{article_id}",
             headers=HEADERS,
-            timeout=10,
+            timeout=6,
         )
         if resp.status_code != 200:
             continue
@@ -77,7 +77,7 @@ def _decode_with_params(article_id: str, signature: str, timestamp: str) -> str:
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         },
         data=f"f.req={quote(json.dumps([[payload]]))}",
-        timeout=10,
+        timeout=6,
     )
     resp.raise_for_status()
 

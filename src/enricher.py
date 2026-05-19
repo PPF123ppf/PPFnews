@@ -160,7 +160,7 @@ def expand_short_summary(item: NewsItem) -> str:
     return clamp_text(combined)
 
 
-def fetch_article_metadata(url: str, timeout: int = 8) -> Dict[str, str]:
+def fetch_article_metadata(url: str, timeout: int = 6) -> Dict[str, str]:
     """Fetch article page metadata for summary and a directly related image."""
     if not url or not url.startswith(("http://", "https://")):
         return {}

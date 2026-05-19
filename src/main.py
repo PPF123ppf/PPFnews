@@ -1,13 +1,13 @@
 """Daily News Push — Entry point for GitHub Actions."""
 
 import re
-from collections import OrderedDict
 from typing import List
 from src.config import load_config
 from src.enricher import enrich_items
 from src.image_cache import cache_images_for_push, commit_cached_images
 from src.models import NewsItem
 from src.pusher import push_news
+from src.quality import print_quality_report, select_quality_top
 
 # Domestic collectors
 from src.collectors.baidu import BaiduCollector
@@ -47,18 +47,18 @@ def deduplicate(items: List[NewsItem]) -> List[NewsItem]:
 def collect_all() -> tuple:
     """Run all collectors and return (domestic, international) items."""
     domestic_collectors = [
-        BaiduCollector(),
-        WeiboCollector(),
         XinhuaCollector(),
         CCTVCollector(),
         TencentCollector(),
         SinaCollector(),
+        BaiduCollector(),
+        WeiboCollector(),
     ]
     international_collectors = [
         ReutersCollector(),
+        APCollector(),
         BBCCollector(),
         CNNCollector(),
-        APCollector(),
         GlobalTimesCollector(),
     ]
 
@@ -91,10 +91,10 @@ def sort_and_top(items: List[NewsItem], top_n: int = 10) -> List[NewsItem]:
     return items[:top_n]
 
 
-def source_balanced_top(items: List[NewsItem], top_n: int = 10) -> List[NewsItem]:
-    """Select top items without letting one source dominate the whole list."""
+def source_balanced_candidates(items: List[NewsItem], limit: int = 30) -> List[NewsItem]:
+    """Build a diverse candidate pool before expensive enrichment and quality scoring."""
     items = deduplicate(items)
-    grouped: "OrderedDict[str, List[NewsItem]]" = OrderedDict()
+    grouped: dict[str, List[NewsItem]] = {}
     for item in items:
         grouped.setdefault(item.source, []).append(item)
 
@@ -102,14 +102,14 @@ def source_balanced_top(items: List[NewsItem], top_n: int = 10) -> List[NewsItem
         source_items.sort(key=lambda x: x.hot_score, reverse=True)
 
     result: List[NewsItem] = []
-    while len(result) < top_n and any(grouped.values()):
+    while len(result) < limit and any(grouped.values()):
         active_sources = sorted(
             (source for source, source_items in grouped.items() if source_items),
             key=lambda source: grouped[source][0].hot_score,
             reverse=True,
         )
         for source in active_sources:
-            if len(result) >= top_n:
+            if len(result) >= limit:
                 break
             result.append(grouped[source].pop(0))
 
@@ -125,17 +125,21 @@ def main():
     domestic_items, international_items = collect_all()
 
     print("\n" + "=" * 40)
-    print(f"国内: {len(domestic_items)} 条 → 去重排序取 TOP 10")
-    domestic_top = source_balanced_top(domestic_items)
-    print("补全文字概括和相关图片...")
-    domestic_top = enrich_items(domestic_top)
+    print(f"国内: {len(domestic_items)} 条 → 构建候选池 → 质量评分取 TOP 10")
+    domestic_candidates = source_balanced_candidates(domestic_items, limit=18)
+    print(f"国内候选池: {len(domestic_candidates)} 条，补全文字概括和相关图片...")
+    domestic_candidates = enrich_items(domestic_candidates)
+    domestic_top, domestic_report = select_quality_top(domestic_candidates, top_n=10)
+    print_quality_report("国内", domestic_report, domestic_top)
     for i, item in enumerate(domestic_top, 1):
         print(f"  {i}. [{item.source}] {item.title} (热度: {item.hot_score})")
 
-    print(f"\n国际: {len(international_items)} 条 → 去重排序取 TOP 10")
-    international_top = sort_and_top(international_items)
-    print("补全文字概括和相关图片...")
-    international_top = enrich_items(international_top)
+    print(f"\n国际: {len(international_items)} 条 → 构建候选池 → 质量评分取 TOP 10")
+    international_candidates = source_balanced_candidates(international_items, limit=18)
+    print(f"国际候选池: {len(international_candidates)} 条，补全文字概括和相关图片...")
+    international_candidates = enrich_items(international_candidates)
+    international_top, international_report = select_quality_top(international_candidates, top_n=10)
+    print_quality_report("国际", international_report, international_top)
     for i, item in enumerate(international_top, 1):
         print(f"  {i}. [{item.source}] {item.title} (score: {item.hot_score})")
 
