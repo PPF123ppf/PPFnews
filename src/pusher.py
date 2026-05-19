@@ -135,7 +135,16 @@ def push_via_serverchan(config: PushConfig, title: str, content: str) -> bool:
             data={"title": title, "desp": content},
             timeout=15,
         )
-        return resp.status_code == 200
+        print(f"[Server酱] HTTP {resp.status_code}: {resp.text[:300]}")
+        if resp.status_code != 200:
+            return False
+        try:
+            data = resp.json()
+            errno = data.get("errno")
+            code = data.get("code")
+            return errno in (0, None) and code in (0, None)
+        except ValueError:
+            return True
     except Exception as e:
         print(f"[Server酱] Push error: {e}")
         return False
@@ -156,7 +165,18 @@ def push_via_pushplus(config: PushConfig, title: str, content: str) -> bool:
             },
             timeout=15,
         )
-        return resp.status_code == 200
+        print(f"[PushPlus] HTTP {resp.status_code}: {resp.text[:500]}")
+        if resp.status_code != 200:
+            return False
+        try:
+            data = resp.json()
+        except ValueError:
+            return False
+        code = data.get("code")
+        success = code == 200
+        if not success:
+            print(f"[PushPlus] Business failure: {data}")
+        return success
     except Exception as e:
         print(f"[PushPlus] Push error: {e}")
         return False
@@ -169,7 +189,8 @@ def push_news(config: PushConfig, domestic: List[NewsItem], international: List[
     pushed = False
     if config.pushplus_token:
         pushed = push_via_pushplus(config, title, format_html_message(domestic, international)) or pushed
-    elif config.serverchan_key:
+    if not pushed and config.serverchan_key:
+        print("[推送] PushPlus 未确认成功，尝试 Server酱备用渠道")
         pushed = push_via_serverchan(config, title, format_message(domestic, international)) or pushed
 
     if not pushed:
