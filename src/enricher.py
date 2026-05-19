@@ -1,7 +1,7 @@
 import re
 from html import unescape
 from typing import Dict, List
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -47,6 +47,31 @@ def extract_image_from_html(html: str, base_url: str = "") -> str:
         return ""
     src = img.get("src") or img.get("data-src") or img.get("data-original")
     return urljoin(base_url, src) if src else ""
+
+
+def normalize_image_url(image_url: str, base_url: str = "") -> str:
+    """Return an absolute HTTP(S) image URL and drop formats that rarely render in WeChat."""
+    if not image_url:
+        return ""
+    absolute_url = urljoin(base_url, image_url.strip())
+    parsed = urlparse(absolute_url)
+    if parsed.scheme not in ("http", "https"):
+        return ""
+    if parsed.path.lower().endswith(".svg"):
+        return ""
+    return absolute_url
+
+
+def prepare_image_for_push(item: NewsItem) -> None:
+    """Normalize image links before optional GitHub Actions image caching."""
+    image_url = normalize_image_url(item.image_url, item.image_source_url or item.url)
+    if not image_url:
+        item.image_url = ""
+        item.original_image_url = ""
+        return
+
+    item.original_image_url = image_url
+    item.image_url = image_url
 
 
 def _meta_content(soup: BeautifulSoup, *keys: str) -> str:
@@ -148,9 +173,10 @@ def fetch_article_metadata(url: str, timeout: int = 8) -> Dict[str, str]:
     summary = article_text if len(article_text) > len(clean_text(description)) else clean_text(description)
 
     final_url = resp.url or url
+    absolute_image_url = normalize_image_url(image_url, final_url)
     return {
         "summary": summary,
-        "image_url": urljoin(final_url, image_url) if image_url else "",
+        "image_url": absolute_image_url,
         "image_source_url": final_url,
     }
 
@@ -178,5 +204,6 @@ def enrich_items(items: List[NewsItem]) -> List[NewsItem]:
             f"{item.title}。该条来自{item.source}，当前热度排名靠前，"
             "反映了今天较高的公共关注度，建议结合来源链接查看完整背景。"
         )
+        prepare_image_for_push(item)
 
     return items

@@ -5,6 +5,7 @@ from collections import OrderedDict
 from typing import List
 from src.config import load_config
 from src.enricher import enrich_items
+from src.image_cache import cache_images_for_push, commit_cached_images
 from src.models import NewsItem
 from src.pusher import push_news
 
@@ -137,6 +138,10 @@ def main():
     international_top = enrich_items(international_top)
     for i, item in enumerate(international_top, 1):
         print(f"  {i}. [{item.source}] {item.title} (score: {item.hot_score})")
+
+    print("\n缓存新闻图片...")
+    cached_images = cache_images_for_push(domestic_top + international_top)
+    commit_cached_images(cached_images)
 
     print("\n" + "=" * 40)
     print("开始推送...")

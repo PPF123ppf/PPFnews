@@ -55,6 +55,8 @@ def _format_item(index: int, item: NewsItem) -> List[str]:
         ])
         if item.image_source_url:
             lines.extend([f"图片来源：{item.image_source_url}", ""])
+        if item.original_image_url and item.original_image_url != item.image_url:
+            lines.extend([f"原图链接：{item.original_image_url}", ""])
     else:
         lines.extend(["**相关图片：** 未获取到可可靠引用的相关图片。", ""])
 
