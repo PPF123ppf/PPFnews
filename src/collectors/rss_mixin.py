@@ -1,5 +1,6 @@
 import feedparser
 from typing import List
+from urllib.parse import quote
 from src.models import NewsItem
 from src.collectors.base import BaseCollector
 
@@ -54,7 +55,7 @@ class GoogleNewsRssMixin(RssCollectorMixin):
         if not self.search_query:
             return []
         self.feed_url = (
-            f"https://news.google.com/rss/search?q={self.search_query}"
+            f"https://news.google.com/rss/search?q={quote(self.search_query)}"
             f"&hl=en-US&gl=US&ceid=US:en"
         )
         return super()._parse_rss(max_items)
