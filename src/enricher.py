@@ -20,6 +20,16 @@ HEADERS = {
 }
 MIN_SUMMARY_LENGTH = 300
 MAX_SUMMARY_LENGTH = 620
+MOJIBAKE_MARKERS = ("Ã", "Â", "ã", "å", "æ", "ç", "è", "é", "ï¼", "â")
+BAD_IMAGE_KEYWORDS = (
+    "gnews/logo",
+    "newslog",
+    "logo",
+    "default",
+    "placeholder",
+    "icon",
+    "blank",
+)
 
 
 def clean_text(value: str) -> str:
@@ -29,7 +39,26 @@ def clean_text(value: str) -> str:
     soup = BeautifulSoup(value, "html.parser")
     text = soup.get_text(" ", strip=True)
     text = unescape(text)
-    return re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
+    return repair_mojibake(text)
+
+
+def looks_mojibake(text: str) -> bool:
+    marker_hits = sum(text.count(marker) for marker in MOJIBAKE_MARKERS)
+    control_hits = sum(1 for char in text if 0x80 <= ord(char) <= 0x9F)
+    cjk_hits = sum(1 for char in text if "\u4e00" <= char <= "\u9fff")
+    return marker_hits + control_hits >= 4 and cjk_hits < marker_hits + control_hits
+
+
+def repair_mojibake(text: str) -> str:
+    """Repair UTF-8 text that was incorrectly decoded as Latin-1."""
+    if not text or not looks_mojibake(text):
+        return text
+    try:
+        repaired = text.encode("latin1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+    return repaired if not looks_mojibake(repaired) else text
 
 
 def clamp_text(value: str, limit: int = MAX_SUMMARY_LENGTH) -> str:
@@ -60,7 +89,8 @@ def normalize_image_url(image_url: str, base_url: str = "") -> str:
         return ""
     if parsed.path.lower().endswith(".svg"):
         return ""
-    if parsed.netloc in {"www.gstatic.com", "gstatic.com"} and "/gnews/logo/" in parsed.path:
+    lowered_url = absolute_url.lower()
+    if any(keyword in lowered_url for keyword in BAD_IMAGE_KEYWORDS):
         return ""
     return absolute_url
 
@@ -141,6 +171,10 @@ def fetch_article_metadata(url: str, timeout: int = 8) -> Dict[str, str]:
     try:
         resp = requests.get(url, headers=HEADERS, timeout=timeout)
         resp.raise_for_status()
+        if resp.apparent_encoding and (
+            not resp.encoding or resp.encoding.lower() in {"iso-8859-1", "latin-1"}
+        ):
+            resp.encoding = resp.apparent_encoding
     except Exception as e:
         print(f"[内容补全] 获取页面失败 {url}: {e}")
         return {}
@@ -165,15 +199,18 @@ def fetch_article_metadata(url: str, timeout: int = 8) -> Dict[str, str]:
         if image_link and image_link.get("href"):
             image_url = image_link["href"].strip()
 
-    if not image_url:
-        article_img = soup.select_one("article img, main img")
-        if article_img:
-            image_url = (
+    if not normalize_image_url(image_url, resp.url or url):
+        image_url = ""
+        for article_img in soup.select("article img, main img, .content img, .article img"):
+            candidate = (
                 article_img.get("src")
                 or article_img.get("data-src")
                 or article_img.get("data-original")
                 or ""
             ).strip()
+            if normalize_image_url(candidate, resp.url or url):
+                image_url = candidate
+                break
 
     article_text = extract_article_text(soup)
     summary = article_text if len(article_text) > len(clean_text(description)) else clean_text(description)
