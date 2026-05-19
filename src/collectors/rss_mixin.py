@@ -25,7 +25,6 @@ class RssCollectorMixin(BaseCollector):
 
                 link = entry.get("link", "")
                 summary = entry.get("summary", "") or entry.get("description", "")
-                # Strip HTML tags from summary
                 summary = summary.replace("<p>", " ").replace("</p>", " ") \
                     .replace("<br>", " ").replace("<br/>", " ") \
                     .replace("<![CDATA[", "").replace("]]>", "")
@@ -44,3 +43,18 @@ class RssCollectorMixin(BaseCollector):
         except Exception as e:
             print(f"[{self.source_name}] RSS parse error: {e}")
             return []
+
+
+class GoogleNewsRssMixin(RssCollectorMixin):
+    """Mixin for Google News RSS filtered by site. Override search_query."""
+
+    search_query: str = ""
+
+    def _parse_rss(self, max_items: int = 15) -> List[NewsItem]:
+        if not self.search_query:
+            return []
+        self.feed_url = (
+            f"https://news.google.com/rss/search?q={self.search_query}"
+            f"&hl=en-US&gl=US&ceid=US:en"
+        )
+        return super()._parse_rss(max_items)

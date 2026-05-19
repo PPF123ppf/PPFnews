@@ -1,11 +1,11 @@
-from src.collectors.rss_mixin import RssCollectorMixin
+from src.collectors.rss_mixin import GoogleNewsRssMixin
 from typing import List
 from src.models import NewsItem
 
 
-class APCollector(RssCollectorMixin):
+class APCollector(GoogleNewsRssMixin):
     source_name = "AP"
-    feed_url = "https://feeds.ap.org/ap/topnews"
+    search_query = "apnews.com+top+news"
 
     def fetch(self) -> List[NewsItem]:
         items = self._parse_rss()

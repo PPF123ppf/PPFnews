@@ -21,20 +21,27 @@ class TencentCollector(BaseCollector):
             soup = BeautifulSoup(resp.text, "lxml")
             items: List[NewsItem] = []
 
-            for i, link in enumerate(soup.select("a[href*='news.qq.com']")[:15]):
-                title = link.get_text(strip=True)
+            # Try multiple selectors to find news links
+            seen_urls = set()
+            for link in soup.find_all("a", href=True)[:50]:
                 href = link.get("href", "")
+                title = link.get_text(strip=True)
                 if len(title) < 8:
                     continue
-                if href and not href.startswith("http"):
-                    href = "https:" + href if href.startswith("//") else "https://news.qq.com" + href
-                items.append(NewsItem(
-                    title=title,
-                    source=self.source_name,
-                    url=href,
-                    category="domestic",
-                    hot_score=self.normalize_score(i + 1),
-                ))
+                # Accept any link that looks like a news article
+                if any(k in href for k in ["news.qq.com", "new.qq.com", "view.inews.qq.com"]):
+                    if href in seen_urls:
+                        continue
+                    seen_urls.add(href)
+                    if not href.startswith("http"):
+                        href = "https:" + href
+                    items.append(NewsItem(
+                        title=title,
+                        source=self.source_name,
+                        url=href,
+                        category="domestic",
+                        hot_score=self.normalize_score(len(items) + 1),
+                    ))
 
             return items
 

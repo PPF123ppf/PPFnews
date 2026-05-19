@@ -1,7 +1,5 @@
-import re
 import requests
 from typing import List
-from bs4 import BeautifulSoup
 from src.models import NewsItem
 from src.collectors.base import BaseCollector
 
@@ -11,32 +9,28 @@ class BaiduCollector(BaseCollector):
 
     def fetch(self) -> List[NewsItem]:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://top.baidu.com/board?tab=realtime",
         }
         try:
             resp = requests.get(
-                "https://top.baidu.com/board?tab=realtime",
+                "https://top.baidu.com/api/board?tab=realtime",
                 headers=headers,
                 timeout=10,
             )
-            soup = BeautifulSoup(resp.text, "lxml")
-            scripts = soup.find_all("script")
+            data = resp.json()
+            cards = data.get("data", {}).get("cards", [])
             items: List[NewsItem] = []
 
-            for script in scripts:
-                content = script.string or ""
-                if "s-data" not in content and "hotSearch" not in content:
-                    continue
-                matches = re.findall(r'"word":"(.*?)"', content)
-                match_urls = re.findall(r'"url":"(.*?)"', content)
-                match_score = re.findall(r'"score":"?(\d+)"?', content)
-
-                for i, word in enumerate(matches[:20]):
-                    url = match_urls[i] if i < len(match_urls) else ""
+            for card in cards:
+                for i, item in enumerate(card.get("content", [])[:20]):
+                    word = item.get("word", "").strip()
+                    if not word:
+                        continue
+                    url = item.get("url", "") or item.get("query", "")
                     if url and not url.startswith("http"):
-                        url = "https://top.baidu.com" + url
-                    score = int(match_score[i]) if i < len(match_score) else self.normalize_score(i + 1)
+                        url = "https://www.baidu.com/s?wd=" + word
+                    score = int(item.get("hotScore", 0)) or self.normalize_score(i + 1)
                     items.append(NewsItem(
                         title=word,
                         source=self.source_name,
@@ -44,10 +38,9 @@ class BaiduCollector(BaseCollector):
                         category="domestic",
                         hot_score=score,
                     ))
-                break
 
             return items
 
         except Exception as e:
-            print(f"[百度热搜] Scrape error: {e}")
+            print(f"[百度热搜] API error: {e}")
             return []

@@ -1,11 +1,11 @@
-from src.collectors.rss_mixin import RssCollectorMixin
+from src.collectors.rss_mixin import GoogleNewsRssMixin
 from typing import List
 from src.models import NewsItem
 
 
-class GlobalTimesCollector(RssCollectorMixin):
+class GlobalTimesCollector(GoogleNewsRssMixin):
     source_name = "环球网"
-    feed_url = "https://www.globaltimes.cn/rss/index.xml"
+    search_query = "globaltimes.cn"
 
     def fetch(self) -> List[NewsItem]:
         items = self._parse_rss()

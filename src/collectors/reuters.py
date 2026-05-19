@@ -1,11 +1,11 @@
-from src.collectors.rss_mixin import RssCollectorMixin
+from src.collectors.rss_mixin import GoogleNewsRssMixin
 from typing import List
 from src.models import NewsItem
 
 
-class ReutersCollector(RssCollectorMixin):
+class ReutersCollector(GoogleNewsRssMixin):
     source_name = "Reuters"
-    feed_url = "https://www.reutersagency.com/feed/"
+    search_query = "reuters"
 
     def fetch(self) -> List[NewsItem]:
         items = self._parse_rss()
