@@ -33,7 +33,7 @@ def _format_section(title: str, items: List[NewsItem]) -> List[str]:
 
 
 def _format_item(index: int, item: NewsItem) -> List[str]:
-    summary = clamp_text(item.summary) or (
+    summary = clamp_text(item.summary, limit=620) or (
         f"{item.title}。该条来自{item.source}，目前热度较高，"
         "可通过来源链接查看完整报道和后续进展。"
     )
@@ -42,7 +42,7 @@ def _format_item(index: int, item: NewsItem) -> List[str]:
         "",
         f"**来源：** {item.source}",
         "",
-        f"**概括：** {summary}",
+        f"**内容概括：** {summary}",
         "",
     ]
 

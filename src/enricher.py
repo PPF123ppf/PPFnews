@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from src.models import NewsItem
+from src.translator import translate_to_chinese
 
 
 HEADERS = {
@@ -16,6 +17,8 @@ HEADERS = {
     ),
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
 }
+MIN_SUMMARY_LENGTH = 300
+MAX_SUMMARY_LENGTH = 620
 
 
 def clean_text(value: str) -> str:
@@ -28,7 +31,7 @@ def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def clamp_text(value: str, limit: int = 220) -> str:
+def clamp_text(value: str, limit: int = MAX_SUMMARY_LENGTH) -> str:
     text = clean_text(value)
     if len(text) <= limit:
         return text
@@ -52,6 +55,51 @@ def _meta_content(soup: BeautifulSoup, *keys: str) -> str:
         if node and node.get("content"):
             return node["content"].strip()
     return ""
+
+
+def extract_article_text(soup: BeautifulSoup, limit: int = 1200) -> str:
+    """Extract readable article paragraphs so pushed summaries are not too thin."""
+    for node in soup(["script", "style", "noscript", "svg"]):
+        node.decompose()
+
+    candidates = soup.select(
+        "article p, main p, .article p, .content p, .post-content p, "
+        ".story-body p, .article-content p, p"
+    )
+    paragraphs: List[str] = []
+    seen = set()
+    for node in candidates:
+        text = clean_text(node.get_text(" ", strip=True))
+        if len(text) < 35:
+            continue
+        lowered = text.lower()
+        if any(skip in lowered for skip in ("cookie", "subscribe", "sign up", "copyright")):
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        paragraphs.append(text)
+        if len(" ".join(paragraphs)) >= limit:
+            break
+
+    return clamp_text(" ".join(paragraphs), limit)
+
+
+def expand_short_summary(item: NewsItem) -> str:
+    """Add useful context when sources expose only a short blurb."""
+    summary = clean_text(item.summary)
+    if len(summary) >= MIN_SUMMARY_LENGTH:
+        return clamp_text(summary)
+
+    category = "国际新闻" if item.category == "international" else "国内新闻"
+    context = (
+        f"这条{category}来自{item.source}，标题为“{item.title}”。"
+        "目前可抓取到的公开正文信息有限，但它进入今日 TOP 列表，说明相关议题正在获得较高关注。"
+        "阅读时建议重点看三点：事件本身出现了什么新进展，相关机构或当事方是否已经回应，"
+        "以及这件事接下来可能带来的政策、市场或社会影响。"
+    )
+    combined = f"{summary} {context}".strip() if summary else context
+    return clamp_text(combined)
 
 
 def fetch_article_metadata(url: str, timeout: int = 8) -> Dict[str, str]:
@@ -96,9 +144,12 @@ def fetch_article_metadata(url: str, timeout: int = 8) -> Dict[str, str]:
                 or ""
             ).strip()
 
+    article_text = extract_article_text(soup)
+    summary = article_text if len(article_text) > len(clean_text(description)) else clean_text(description)
+
     final_url = resp.url or url
     return {
-        "summary": clean_text(description),
+        "summary": summary,
         "image_url": urljoin(final_url, image_url) if image_url else "",
         "image_source_url": final_url,
     }
@@ -107,17 +158,23 @@ def fetch_article_metadata(url: str, timeout: int = 8) -> Dict[str, str]:
 def enrich_items(items: List[NewsItem]) -> List[NewsItem]:
     """Fill missing summaries/images after ranking, limiting network work to pushed items."""
     for item in items:
-        metadata: Dict[str, str] = {}
-        if not item.summary or not item.image_url:
-            metadata = fetch_article_metadata(item.url)
+        metadata: Dict[str, str] = fetch_article_metadata(item.url)
 
-        if not item.summary:
+        metadata_summary = metadata.get("summary", "")
+        if not item.summary or len(clean_text(item.summary)) < 180:
+            item.summary = metadata_summary or item.summary
+        elif metadata_summary and len(metadata_summary) > len(clean_text(item.summary)):
             item.summary = metadata.get("summary", "")
+
         if not item.image_url:
             item.image_url = metadata.get("image_url", "")
             item.image_source_url = metadata.get("image_source_url", "")
 
-        item.summary = clamp_text(item.summary) or (
+        if item.category == "international":
+            item.title = translate_to_chinese(item.title)
+            item.summary = clamp_text(translate_to_chinese(item.summary))
+
+        item.summary = expand_short_summary(item) or (
             f"{item.title}。该条来自{item.source}，当前热度排名靠前，"
             "反映了今天较高的公共关注度，建议结合来源链接查看完整背景。"
         )

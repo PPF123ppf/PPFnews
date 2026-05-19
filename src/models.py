@@ -18,7 +18,7 @@ class NewsItem:
             "title": self.title,
             "source": self.source,
             "url": self.url,
-            "summary": self.summary[:250] if self.summary else "",
+            "summary": self.summary[:600] if self.summary else "",
             "image_url": self.image_url,
             "image_source_url": self.image_source_url,
             "category": self.category,
