@@ -1,6 +1,7 @@
 """Daily News Push — Entry point for GitHub Actions."""
 
 import re
+from collections import OrderedDict
 from typing import List
 from src.config import load_config
 from src.enricher import enrich_items
@@ -89,6 +90,31 @@ def sort_and_top(items: List[NewsItem], top_n: int = 10) -> List[NewsItem]:
     return items[:top_n]
 
 
+def source_balanced_top(items: List[NewsItem], top_n: int = 10) -> List[NewsItem]:
+    """Select top items without letting one source dominate the whole list."""
+    items = deduplicate(items)
+    grouped: "OrderedDict[str, List[NewsItem]]" = OrderedDict()
+    for item in items:
+        grouped.setdefault(item.source, []).append(item)
+
+    for source_items in grouped.values():
+        source_items.sort(key=lambda x: x.hot_score, reverse=True)
+
+    result: List[NewsItem] = []
+    while len(result) < top_n and any(grouped.values()):
+        active_sources = sorted(
+            (source for source, source_items in grouped.items() if source_items),
+            key=lambda source: grouped[source][0].hot_score,
+            reverse=True,
+        )
+        for source in active_sources:
+            if len(result) >= top_n:
+                break
+            result.append(grouped[source].pop(0))
+
+    return result
+
+
 def main():
     config = load_config()
     print("=" * 40)
@@ -99,7 +125,7 @@ def main():
 
     print("\n" + "=" * 40)
     print(f"国内: {len(domestic_items)} 条 → 去重排序取 TOP 10")
-    domestic_top = sort_and_top(domestic_items)
+    domestic_top = source_balanced_top(domestic_items)
     print("补全文字概括和相关图片...")
     domestic_top = enrich_items(domestic_top)
     for i, item in enumerate(domestic_top, 1):
