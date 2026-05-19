@@ -1,4 +1,5 @@
 import feedparser
+from datetime import datetime, timezone, timedelta
 from typing import List
 from urllib.parse import quote
 from src.models import NewsItem
@@ -10,6 +11,8 @@ class RssCollectorMixin(BaseCollector):
     """Mixin for RSS-based collectors. Override feed_url and source_name."""
 
     feed_url: str = ""
+    max_age_hours: int = 48
+    strip_source_suffix: bool = False
 
     def _parse_rss(self, max_items: int = 15) -> List[NewsItem]:
         """Parse RSS feed and return news items."""
@@ -20,8 +23,12 @@ class RssCollectorMixin(BaseCollector):
             feed = feedparser.parse(self.feed_url)
             items: List[NewsItem] = []
 
-            for i, entry in enumerate(feed.entries[:max_items]):
-                title = entry.get("title", "").strip()
+            for entry in feed.entries:
+                published_at = self._entry_published_at(entry)
+                if published_at and not self._is_recent(published_at):
+                    continue
+
+                title = self._clean_title(entry.get("title", "").strip())
                 if not title:
                     continue
 
@@ -36,9 +43,12 @@ class RssCollectorMixin(BaseCollector):
                     summary=clean_text(summary_html),
                     image_url=image_url,
                     image_source_url=link if image_url else "",
+                    published_at=published_at.isoformat() if published_at else "",
                     category="domestic",
-                    hot_score=self.normalize_score(i + 1),
+                    hot_score=self.normalize_score(len(items) + 1),
                 ))
+                if len(items) >= max_items:
+                    break
 
             return items
 
@@ -64,17 +74,36 @@ class RssCollectorMixin(BaseCollector):
 
         return extract_image_from_html(summary_html, entry.get("link", ""))
 
+    def _clean_title(self, title: str) -> str:
+        if not self.strip_source_suffix:
+            return title
+        return title.rsplit(" - ", 1)[0].strip() if " - " in title else title
+
+    def _entry_published_at(self, entry) -> datetime | None:
+        parsed = entry.get("published_parsed") or entry.get("updated_parsed")
+        if not parsed:
+            return None
+        return datetime(*parsed[:6], tzinfo=timezone.utc)
+
+    def _is_recent(self, published_at: datetime) -> bool:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=self.max_age_hours)
+        return published_at >= cutoff
+
 
 class GoogleNewsRssMixin(RssCollectorMixin):
     """Mixin for Google News RSS filtered by site. Override search_query."""
 
     search_query: str = ""
+    language: str = "en-US"
+    country: str = "US"
+    ceid: str = "US:en"
+    strip_source_suffix: bool = True
 
     def _parse_rss(self, max_items: int = 15) -> List[NewsItem]:
         if not self.search_query:
             return []
         self.feed_url = (
             f"https://news.google.com/rss/search?q={quote(self.search_query)}"
-            f"&hl=en-US&gl=US&ceid=US:en"
+            f"&hl={self.language}&gl={self.country}&ceid={self.ceid}"
         )
         return super()._parse_rss(max_items)

@@ -5,7 +5,7 @@ from src.models import NewsItem
 
 class GlobalTimesCollector(GoogleNewsRssMixin):
     source_name = "环球网"
-    search_query = "globaltimes.cn"
+    search_query = "site:globaltimes.cn when:2d"
 
     def fetch(self) -> List[NewsItem]:
         items = self._parse_rss()

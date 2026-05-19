@@ -1,11 +1,11 @@
-from src.collectors.rss_mixin import RssCollectorMixin
+from src.collectors.rss_mixin import GoogleNewsRssMixin
 from typing import List
 from src.models import NewsItem
 
 
-class CNNCollector(RssCollectorMixin):
+class CNNCollector(GoogleNewsRssMixin):
     source_name = "CNN"
-    feed_url = "http://rss.cnn.com/rss/cnn_topstories.rss"
+    search_query = "site:cnn.com when:2d"
 
     def fetch(self) -> List[NewsItem]:
         items = self._parse_rss()

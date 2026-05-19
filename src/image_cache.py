@@ -4,7 +4,7 @@ import subprocess
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Iterable, List
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import requests
 
@@ -44,6 +44,11 @@ def _extension_from_content_type(content_type: str) -> str:
     return ".jpg"
 
 
+def _extension_from_url(url: str) -> str:
+    suffix = Path(urlparse(url).path).suffix.lower()
+    return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp", ".gif"} else ""
+
+
 def _raw_github_url(path: Path) -> str:
     repo = os.environ["GITHUB_REPOSITORY"]
     branch = os.getenv("GITHUB_REF_NAME", "main")
@@ -61,11 +66,12 @@ def _download_image(url: str, dest_without_ext: Path) -> Path | None:
         return None
 
     content_type = resp.headers.get("content-type", "")
-    if "image" not in content_type.lower():
+    url_ext = _extension_from_url(url)
+    if "image" not in content_type.lower() and not url_ext:
         print(f"[图片缓存] 非图片响应 {url}: {content_type}")
         return None
 
-    dest = dest_without_ext.with_suffix(_extension_from_content_type(content_type))
+    dest = dest_without_ext.with_suffix(_extension_from_content_type(content_type) if "image" in content_type.lower() else url_ext)
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     written = 0

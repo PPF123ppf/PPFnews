@@ -11,6 +11,7 @@ class NewsItem:
     image_url: str = ""
     image_source_url: str = ""
     original_image_url: str = ""
+    published_at: str = ""
     category: str = "domestic"  # "domestic" | "international"
     hot_score: int = 0
 
@@ -23,6 +24,7 @@ class NewsItem:
             "image_url": self.image_url,
             "image_source_url": self.image_source_url,
             "original_image_url": self.original_image_url,
+            "published_at": self.published_at,
             "category": self.category,
             "hot_score": self.hot_score,
         }

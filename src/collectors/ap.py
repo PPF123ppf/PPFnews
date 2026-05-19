@@ -5,7 +5,7 @@ from src.models import NewsItem
 
 class APCollector(GoogleNewsRssMixin):
     source_name = "AP"
-    search_query = "apnews.com+top+news"
+    search_query = "site:apnews.com when:2d"
 
     def fetch(self) -> List[NewsItem]:
         items = self._parse_rss()

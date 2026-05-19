@@ -5,7 +5,7 @@ from src.models import NewsItem
 
 class ReutersCollector(GoogleNewsRssMixin):
     source_name = "Reuters"
-    search_query = "reuters"
+    search_query = "site:reuters.com when:2d"
 
     def fetch(self) -> List[NewsItem]:
         items = self._parse_rss()
